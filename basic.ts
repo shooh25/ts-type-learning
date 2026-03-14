@@ -1,4 +1,4 @@
-import { error } from "npm:tiny-ts-parser";
+import { parseBasic } from "npm:tiny-ts-parser";
 
 type Type =
   | { tag: "Boolean" }
@@ -16,8 +16,6 @@ type Term =
   | { tag: "var"; name: string }
   | { tag: "func"; params: Param[]; body: Term }
   | { tag: "call"; func: Term; args: Term[] }
-  | { tag: "seq"; body: Term; rest: Term }
-  | { tag: "const"; name: string; init: Term; rest: Term };
 
 type TypeEnv = Record<string, Type>;
 
@@ -49,11 +47,11 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
       return { tag: "Boolean" };
     case "if": {
       const condTy = typecheck(t.cond, tyEnv);
-      if (condTy.tag !== "Boolean") error("boolean expected", t.cond);
+      if (condTy.tag !== "Boolean") throw "Boolean型を入力してください";
       const thnTy = typecheck(t.thn, tyEnv);
       const elsTy = typecheck(t.els, tyEnv);
       if (!typeEq(thnTy, elsTy)) {
-        error("then and else have different types", t);
+        throw "then節とelse節の型が異なります";
       }
       return thnTy;
     }
@@ -61,13 +59,15 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
       return { tag: "Number" };
     case "add": {
       const leftTy = typecheck(t.left, tyEnv);
-      if (leftTy.tag !== "Number") error("number expected", t.left);
+      if (leftTy.tag !== "Number") throw "左辺は数値型である必要があります";
       const rightTy = typecheck(t.right, tyEnv);
-      if (rightTy.tag !== "Number") error("number expected", t.right);
+      if (rightTy.tag !== "Number") throw "右辺は数値型である必要があります";
       return { tag: "Number" };
     }
+    
+    // ここから関数型チェック
     case "var": {
-      if (tyEnv[t.name] === undefined) error(`unknown variable: ${t.name}`, t);
+      if (tyEnv[t.name] === undefined) throw "変数が未定義です";
       return tyEnv[t.name];
     }
     case "func": {
@@ -80,25 +80,19 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
     }
     case "call": {
       const funcTy = typecheck(t.func, tyEnv);
-      if (funcTy.tag !== "Func") error("function type expected", t.func);
+      if (funcTy.tag !== "Func") throw "関数型である必要があります";
       if (funcTy.params.length !== t.args.length) {
-        error("wrong number of arguments", t);
+        throw "引数の数が正しくありません";
       }
       for (let i = 0; i < t.args.length; i++) {
         const argTy = typecheck(t.args[i], tyEnv);
         if (!typeEq(argTy, funcTy.params[i].type)) {
-          error("parameter type mismatch", t.args[i]);
+          throw "引数の型が一致しません";
         }
       }
       return funcTy.retType;
     }
-    case "seq":
-      typecheck(t.body, tyEnv);
-      return typecheck(t.rest, tyEnv);
-    case "const": {
-      const ty = typecheck(t.init, tyEnv);
-      const newTyEnv = { ...tyEnv, [t.name]: ty };
-      return typecheck(t.rest, newTyEnv);
-    }
   }
 }
+
+console.log(typecheck(parseBasic("(x: boolean) => x"), {}));
