@@ -16,6 +16,8 @@ type Term =
   | { tag: "var"; name: string }
   | { tag: "func"; params: Param[]; body: Term }
   | { tag: "call"; func: Term; args: Term[] }
+  | { tag: "seq"; body: Term; rest: Term }
+  | { tag: "const"; name: string; init: Term; rest: Term };
 
 type TypeEnv = Record<string, Type>;
 
@@ -92,7 +94,19 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
       }
       return funcTy.retType;
     }
+
+    // ここから逐次実行と変数定義のチェック
+    case "seq":
+      typecheck(t.body, tyEnv);
+      return typecheck(t.rest, tyEnv);
+    case "const": {
+      const ty = typecheck(t.init, tyEnv);
+      const newTyEnv = { ...tyEnv, [t.name]: ty };
+      return typecheck(t.rest, newTyEnv);
+    }
   }
 }
 
-console.log(typecheck(parseBasic("((x: number) => x)(42)"), {}));
+// console.log(parseBasic("1; true;"));
+console.log(typecheck(parseBasic("((x: number) => x)(42);((x: number) => x)(42);((x: boolean) => x)(true);"), {}));
+// console.log(typecheck(parseBasic("1; true; 3;"), {}));
