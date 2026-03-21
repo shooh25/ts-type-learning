@@ -1,4 +1,4 @@
-import { error } from "npm:tiny-ts-parser";
+import { parseObj, parseBasic } from "npm:tiny-ts-parser";
 
 type Type =
   | { tag: "Boolean" }
@@ -65,11 +65,11 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
       return { tag: "Boolean" };
     case "if": {
       const condTy = typecheck(t.cond, tyEnv);
-      if (condTy.tag !== "Boolean") error("boolean expected", t.cond);
+      if (condTy.tag !== "Boolean") throw "if の条件式は Boolean 型である必要があります";
       const thnTy = typecheck(t.thn, tyEnv);
       const elsTy = typecheck(t.els, tyEnv);
       if (!typeEq(thnTy, elsTy)) {
-        error("then and else have different types", t);
+        throw "if の then 節と else 節の型が一致しません";
       }
       return thnTy;
     }
@@ -77,13 +77,13 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
       return { tag: "Number" };
     case "add": {
       const leftTy = typecheck(t.left, tyEnv);
-      if (leftTy.tag !== "Number") error("number expected", t.left);
+      if (leftTy.tag !== "Number") throw "add の左オペランドは Number 型である必要があります";
       const rightTy = typecheck(t.right, tyEnv);
-      if (rightTy.tag !== "Number") error("number expected", t.right);
+      if (rightTy.tag !== "Number") throw "add の右オペランドは Number 型である必要があります";
       return { tag: "Number" };
     }
     case "var": {
-      if (tyEnv[t.name] === undefined) error(`unknown variable: ${t.name}`, t);
+      if (tyEnv[t.name] === undefined) throw `未定義の変数です: ${t.name}`;
       return tyEnv[t.name];
     }
     case "func": {
@@ -96,14 +96,14 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
     }
     case "call": {
       const funcTy = typecheck(t.func, tyEnv);
-      if (funcTy.tag !== "Func") error("function type expected", t.func);
+      if (funcTy.tag !== "Func") throw "呼び出し対象は関数型である必要があります";
       if (funcTy.params.length !== t.args.length) {
-        error("wrong number of arguments", t);
+        throw "引数の個数が正しくありません";
       }
       for (let i = 0; i < t.args.length; i++) {
         const argTy = typecheck(t.args[i], tyEnv);
         if (!typeEq(argTy, funcTy.params[i].type)) {
-          error("parameter type mismatch", t.args[i]);
+          throw "引数の型がパラメーター型と一致しません";
         }
       }
       return funcTy.retType;
@@ -113,8 +113,8 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
       return typecheck(t.rest, tyEnv);
     case "const": {
       const ty = typecheck(t.init, tyEnv);
-      const newTyEnv = { ...tyEnv, [t.name]: ty };
-      return typecheck(t.rest, newTyEnv);
+      const newTyEnv = { ...tyEnv, [t.name]: ty }; // { f: { x: Number } }になる
+      return typecheck(t.rest, newTyEnv); // f.x と { f: { x: Number } }を渡す
     }
     case "objectNew": {
       const props = t.props.map(
@@ -123,11 +123,17 @@ export function typecheck(t: Term, tyEnv: TypeEnv): Type {
       return { tag: "Object", props };
     }
     case "objectGet": {
-      const objectTy = typecheck(t.obj, tyEnv);
-      if (objectTy.tag !== "Object") error("object type expected", t.obj);
+      const objectTy = typecheck(t.obj, tyEnv); // var f と { f: { x: Number } }をチェック -> Object型が返る
+      if (objectTy.tag !== "Object") throw "objectGet の対象は Object 型である必要があります"; 
       const prop = objectTy.props.find((prop) => prop.name === t.propName);
-      if (!prop) error(`unknown property name: ${t.propName}`, t);
+      if (!prop) throw `プロパティが見つかりません: ${t.propName}`;
       return prop.type;
     }
   }
 }
+
+console.log(parseObj(`const f =({ x: 1 }); f.x`), {});
+console.log(typecheck(parseObj(`const f =({ x: 1 }); f.x`), {}));
+console.log(typecheck(parseObj(`const f =({ x: 1 }); f.y`), {}));
+
+
